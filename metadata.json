@@ -1,0 +1,6 @@
+{
+  "name": "FitSquad - Orario Corsi Palestra & Gestione Allievi",
+  "description": "Orario corsi palestra, tabellone settimanale, gestione profili allievi, ruoli gestore e allievo con corsi per mister e allievi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
