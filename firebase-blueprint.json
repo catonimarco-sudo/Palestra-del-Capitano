@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "GymSchedule": {
+      "title": "GymSchedule",
+      "description": "Weekly gym schedule rows and course slots",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Row identifier matching the time slot"
+        },
+        "time": {
+          "type": "string",
+          "description": "Time slot string such as 09:00 - 10:00"
+        },
+        "days": {
+          "type": "object",
+          "description": "Map of day keys to course cells"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "time", "days"]
+    },
+    "Allievo": {
+      "title": "Allievo",
+      "description": "Gym student profile and contact details",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique student identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Student full name"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number"
+        },
+        "email": {
+          "type": "string",
+          "description": "Student email address"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Instructor notes"
+        },
+        "medicalCertExpiry": {
+          "type": "string",
+          "description": "Medical certificate expiry date"
+        },
+        "joinedDate": {
+          "type": "string",
+          "description": "Date student joined"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "GymSettings": {
+      "title": "GymSettings",
+      "description": "Gym center details and category colors",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Settings document ID like info or colors"
+        },
+        "data": {
+          "type": "object",
+          "description": "Settings payload object"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "data"]
+    }
+  },
+  "firestore": {
+    "/gym_schedule/{rowId}": {
+      "schema": "GymSchedule",
+      "description": "Weekly schedule rows indexed by time slot ID"
+    },
+    "/gym_students/{studentId}": {
+      "schema": "Allievo",
+      "description": "Registered students list"
+    },
+    "/gym_settings/{settingsId}": {
+      "schema": "GymSettings",
+      "description": "Center details and category colors"
+    }
+  }
+}

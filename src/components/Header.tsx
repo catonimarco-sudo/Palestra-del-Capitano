@@ -7,6 +7,7 @@ import { StudentDropdown } from './StudentDropdown';
 interface HeaderProps {
   gymInfo: GymInfoSettings;
   userRole: UserRole;
+  isCloudConnected?: boolean;
   onSelectUserRole: (role: UserRole) => void;
   onOpenGymSettings: () => void;
   students: Allievo[];
@@ -20,6 +21,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   gymInfo,
   userRole,
+  isCloudConnected = false,
   onSelectUserRole,
   onOpenGymSettings,
   students,
@@ -149,12 +151,32 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {currentStudent && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
-              <span>Allievo attivo:</span>
-              <strong className="text-white font-bold">{currentStudent.name}</strong>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isCloudConnected ? (
+              <div
+                className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-500/30 font-semibold"
+                title="Connessione cloud attiva: le modifiche si sincronizzano in tempo reale tra AI Studio, Vercel e smartphone"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Cloud Live</span>
+              </div>
+            ) : (
+              <div
+                className="flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-950/60 px-2.5 py-1 rounded-lg border border-amber-500/30 font-semibold"
+                title="Connessione cloud in fase di attivazione..."
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Connessione Cloud...</span>
+              </div>
+            )}
+
+            {currentStudent && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+                <span>Allievo attivo:</span>
+                <strong className="text-white font-bold">{currentStudent.name}</strong>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

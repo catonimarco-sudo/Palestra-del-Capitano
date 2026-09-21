@@ -7,6 +7,16 @@ import { DEFAULT_GYM_INFO, GymInfoSettings, INITIAL_GYM_SCHEDULE, GymScheduleRow
 import { Allievo, UserRole } from './types';
 import confetti from 'canvas-confetti';
 import { Dumbbell } from 'lucide-react';
+import {
+  initAuth,
+  testFirestoreConnection,
+  subscribeToGymInfo,
+  saveGymInfoToCloud,
+  subscribeToStudents,
+  saveStudentToCloud,
+  deleteStudentFromCloud,
+  saveScheduleToCloud,
+} from './lib/firebase';
 
 const DEFAULT_STUDENTS: Allievo[] = [
   { id: 'allievo_1', name: 'Marco Rossi', phone: '340 1234567', isCurrentUser: true },
@@ -17,6 +27,9 @@ const DEFAULT_STUDENTS: Allievo[] = [
 ];
 
 export default function App() {
+  // Cloud real-time connection status
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
+
   // User role: 'gestore' | 'allievo'
   const [userRole, setUserRole] = useState<UserRole>(() => {
     try {
@@ -74,6 +87,40 @@ export default function App() {
   const [isStudentManagerOpen, setIsStudentManagerOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
 
+  // Auto-connect to Firebase and subscribe to Real-Time Cloud updates
+  useEffect(() => {
+    // 1. Authenticate anonymously for seamless multi-client access across Vercel & AI Studio
+    const unsubAuth = initAuth((user) => {
+      if (user) {
+        setIsCloudConnected(true);
+      }
+    });
+
+    testFirestoreConnection();
+
+    // 2. Real-time subscription to Gym Info
+    const unsubInfo = subscribeToGymInfo((cloudInfo) => {
+      setGymInfo(cloudInfo);
+    }, gymInfo);
+
+    // 3. Real-time subscription to Students
+    const unsubStudents = subscribeToStudents((cloudStudents) => {
+      setStudents(cloudStudents);
+      setCurrentStudentId((prev) => {
+        if (!prev || !cloudStudents.some((s) => s.id === prev)) {
+          return cloudStudents[0]?.id || null;
+        }
+        return prev;
+      });
+    }, students);
+
+    return () => {
+      unsubAuth();
+      unsubInfo();
+      unsubStudents();
+    };
+  }, []);
+
   // Persist user role
   useEffect(() => {
     try {
@@ -81,21 +128,7 @@ export default function App() {
     } catch {}
   }, [userRole]);
 
-  // Persist gym info
-  useEffect(() => {
-    try {
-      localStorage.setItem('gym_info_settings', JSON.stringify(gymInfo));
-    } catch {}
-  }, [gymInfo]);
-
-  // Persist students
-  useEffect(() => {
-    try {
-      localStorage.setItem('gym_allievi_list', JSON.stringify(students));
-    } catch {}
-  }, [students]);
-
-  // Persist active student ID
+  // Persist active student ID locally
   useEffect(() => {
     try {
       if (currentStudentId) {
@@ -112,15 +145,17 @@ export default function App() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const handleSaveGymInfo = (updatedInfo: GymInfoSettings) => {
+  const handleSaveGymInfo = async (updatedInfo: GymInfoSettings) => {
     setGymInfo(updatedInfo);
     try {
-      localStorage.setItem('gym_info_settings', JSON.stringify(updatedInfo));
-    } catch {}
-    showToast('✨ Dati del centro sportivo aggiornati con successo!');
+      await saveGymInfoToCloud(updatedInfo);
+    } catch (e) {
+      console.error('Error saving gym info to cloud:', e);
+    }
+    showToast('✨ Dati del centro sportivo salvati in tempo reale nel Cloud!');
   };
 
-  // Add new student with full profile support
+  // Add new student with full profile support and Cloud sync
   const handleAddStudent = (
     name: string,
     phone?: string,
@@ -141,6 +176,11 @@ export default function App() {
     setStudents((prev) => [...prev, newStudent]);
     setCurrentStudentId(newStudent.id);
 
+    // Save to Firestore in real time
+    saveStudentToCloud(newStudent).catch((err) => {
+      console.error('Error saving student to cloud:', err);
+    });
+
     try {
       confetti({
         particleCount: 30,
@@ -149,11 +189,11 @@ export default function App() {
       });
     } catch {}
 
-    showToast(`✓ Allievo "${newStudent.name}" aggiunto con successo!`);
+    showToast(`✓ Allievo "${newStudent.name}" salvato nel Cloud!`);
     return newStudent;
   };
 
-  // Edit existing student with full profile updates
+  // Edit existing student with full profile updates and Cloud sync
   const handleEditStudent = (
     id: string,
     updates: {
@@ -164,33 +204,47 @@ export default function App() {
       medicalCertExpiry?: string;
     }
   ) => {
+    let updatedStudentObj: Allievo | undefined;
+
     setStudents((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              ...updates,
-              name: updates.name.trim(),
-              phone: updates.phone?.trim(),
-              email: updates.email?.trim(),
-              notes: updates.notes?.trim(),
-              medicalCertExpiry: updates.medicalCertExpiry?.trim(),
-            }
-          : s
-      )
+      prev.map((s) => {
+        if (s.id === id) {
+          updatedStudentObj = {
+            ...s,
+            ...updates,
+            name: updates.name.trim(),
+            phone: updates.phone?.trim(),
+            email: updates.email?.trim(),
+            notes: updates.notes?.trim(),
+            medicalCertExpiry: updates.medicalCertExpiry?.trim(),
+          };
+          return updatedStudentObj;
+        }
+        return s;
+      })
     );
-    showToast('✓ Profilo allievo aggiornato con successo!');
+
+    if (updatedStudentObj) {
+      saveStudentToCloud(updatedStudentObj).catch((err) => {
+        console.error('Error updating student in cloud:', err);
+      });
+    }
+
+    showToast('✓ Profilo allievo aggiornato in tempo reale!');
   };
 
-  // Delete student directly without window.confirm (which fails in iframes)
+  // Delete student directly and sync with Cloud
   const handleDeleteStudent = (id: string) => {
     const studentToDelete = students.find((s) => s.id === id);
     if (!studentToDelete) return;
 
-    // 1. Remove from students list
+    // 1. Remove from students list and delete from Cloud
     setStudents((prev) => prev.filter((s) => s.id !== id));
+    deleteStudentFromCloud(id).catch((err) => {
+      console.error('Error deleting student from cloud:', err);
+    });
 
-    // 2. Remove student ID from all courses in gym_weekly_schedule
+    // 2. Remove student ID from all courses in gym_weekly_schedule and sync to Cloud
     try {
       const saved = localStorage.getItem('gym_weekly_schedule');
       if (saved) {
@@ -209,8 +263,7 @@ export default function App() {
           });
           return { ...row, days: updatedDays };
         });
-        localStorage.setItem('gym_weekly_schedule', JSON.stringify(cleaned));
-        // Dispatch custom event to notify any components listening
+        saveScheduleToCloud(cleaned).catch(() => {});
         window.dispatchEvent(new Event('gym_schedule_updated'));
       }
     } catch {}
@@ -240,6 +293,7 @@ export default function App() {
       <Header
         gymInfo={gymInfo}
         userRole={userRole}
+        isCloudConnected={isCloudConnected}
         onSelectUserRole={setUserRole}
         onOpenGymSettings={() => setIsGymSettingsModalOpen(true)}
         students={students}
