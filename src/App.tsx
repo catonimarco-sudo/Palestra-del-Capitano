@@ -289,7 +289,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-[#7cb342] selection:text-slate-950">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-[#7cb342] selection:text-slate-950 print:min-h-0 print:h-auto print:bg-white print:text-black print:p-0 print:m-0 print:block">
       {/* Navigation Header */}
       <Header
         gymInfo={gymInfo}
@@ -298,7 +298,7 @@ export default function App() {
       />
 
       {/* Main Content: Timetable View & Direct Course Self-Enrollment */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 print:p-0 print:m-0 print:max-w-none print:w-full print:bg-white">
         <GymScheduleView
           students={students}
           onAddStudent={handleAddStudent}

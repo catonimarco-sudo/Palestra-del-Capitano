@@ -527,7 +527,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
   };
 
   return (
-    <div className="space-y-5 animate-fadeIn pb-12">
+    <div className="space-y-5 animate-fadeIn pb-12 print:space-y-0 print:pb-0 print:p-0 print:m-0 print:bg-white">
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed top-20 right-4 z-50 bg-emerald-500 text-slate-950 font-black px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 border border-emerald-400 animate-bounce print:hidden">
@@ -671,7 +671,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
           themeMode === 'poster'
             ? 'bg-white text-slate-900 border border-slate-200'
             : 'bg-slate-900 text-white border border-slate-800'
-        } print:bg-white print:text-black print:border-none print:p-0 print:m-0 print:shadow-none print:w-full`}
+        } print:bg-white print:text-black print:border-none print:p-0 print:m-0 print:shadow-none print:w-full print:rounded-none`}
       >
         {/* HEADER: ORARIO CORSI PALESTRA (CUSTOMIZABLE) */}
         <div className="text-center mb-5 sm:mb-7 relative group">
@@ -857,7 +857,10 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
         </div>
 
         {/* FOOTER BAR (EXACT REPLICA OF THE IMAGE FOOTER BANNER) */}
-        <div className="mt-4 rounded-2xl bg-[#1e232a] text-white p-4 sm:p-5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6 relative overflow-hidden shadow-xl border border-slate-800 print:border print:border-gray-800 group">
+        <div
+          id="gym-footer-banner"
+          className="mt-4 rounded-2xl bg-[#1e232a] text-white p-4 sm:p-5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6 relative overflow-hidden shadow-xl border border-slate-800 print:border-none print:mt-3 print:shadow-none print-keep-dark group"
+        >
           {/* Vertical Lime Green Accent Bar on the far left */}
           <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-[#7cb342]" />
 

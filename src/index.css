@@ -29,35 +29,76 @@
 @media print {
   @page {
     size: landscape;
-    margin: 0.6cm;
+    margin: 0.5cm;
   }
 
-  body {
-    background-color: #ffffff !important;
-    color: #000000 !important;
+  *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  header, footer, nav, .print\:hidden {
+  html,
+  body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  #root,
+  #root > div,
+  .min-h-screen,
+  main {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+  }
+
+  header,
+  footer,
+  nav,
+  .print\:hidden {
     display: none !important;
   }
 
-  main {
-    max-width: 100% !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
+  #print-gym-schedule,
   #gym-poster-container {
     background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     padding: 0 !important;
+    margin: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
     page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  #gym-footer-banner,
+  .print-keep-dark {
+    background-color: #1e232a !important;
+    background: #1e232a !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .pb-12,
+  .space-y-5 {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
   }
 }
 
