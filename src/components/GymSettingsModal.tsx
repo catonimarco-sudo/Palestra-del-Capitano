@@ -14,6 +14,7 @@ import {
   Type,
   FileText,
   Clock,
+  Smartphone,
 } from 'lucide-react';
 
 interface GymSettingsModalProps {
@@ -21,6 +22,7 @@ interface GymSettingsModalProps {
   onClose: () => void;
   gymInfo: GymInfoSettings;
   onSave: (updatedInfo: GymInfoSettings) => void;
+  onOpenAppIconModal?: () => void;
 }
 
 export const GymSettingsModal: React.FC<GymSettingsModalProps> = ({
@@ -28,6 +30,7 @@ export const GymSettingsModal: React.FC<GymSettingsModalProps> = ({
   onClose,
   gymInfo,
   onSave,
+  onOpenAppIconModal,
 }) => {
   const [formData, setFormData] = useState<GymInfoSettings>(gymInfo);
   const [activeSection, setActiveSection] = useState<'centro' | 'brand' | 'notes'>('centro');
@@ -231,6 +234,44 @@ export const GymSettingsModal: React.FC<GymSettingsModalProps> = ({
           {/* SECTION 2: NOME APP & TITOLO TABELLONE */}
           {activeSection === 'brand' && (
             <div className="space-y-4 animate-fadeIn">
+              {/* App Icon for iPhone, iPad & Tablet Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shadow-inner">
+                    {formData.appIconUrl ? (
+                      <img
+                        src={formData.appIconUrl}
+                        alt="Icona App"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <Smartphone className="w-6 h-6 text-[#7cb342]" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-white block">
+                      Icona App per iPhone, iPad & Tablet
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Personalizza il logo che compare aggiungendo l'app alla Home di iOS/iPadOS
+                    </span>
+                  </div>
+                </div>
+
+                {onOpenAppIconModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenAppIconModal();
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-[#7cb342] hover:text-white border border-[#7cb342]/40 text-xs font-bold transition-all shrink-0 active:scale-95"
+                  >
+                    Personalizza Icona...
+                  </button>
+                )}
+              </div>
+
               {/* Nome App & Sottotitolo Header */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

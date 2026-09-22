@@ -2,10 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { GymScheduleView } from './components/GymScheduleView';
 import { GymSettingsModal } from './components/GymSettingsModal';
+import { AppIconModal } from './components/AppIconModal';
+import { CourseNotificationModal } from './components/CourseNotificationModal';
 import { DEFAULT_GYM_INFO, GymInfoSettings, INITIAL_GYM_SCHEDULE, GymScheduleRow } from './data/gymScheduleData';
 import { Allievo, UserRole } from './types';
 import confetti from 'canvas-confetti';
-import { Dumbbell } from 'lucide-react';
+import { Dumbbell, BellRing, X } from 'lucide-react';
+import { applyAppIconToDOM } from './utils/appIcon';
+import {
+  checkAndTriggerCourseReminders,
+  getStoredNotificationSettings,
+} from './utils/courseNotifications';
 import {
   initAuth,
   testFirestoreConnection,
@@ -85,7 +92,51 @@ export default function App() {
   // Modal open states
   const [isGymSettingsModalOpen, setIsGymSettingsModalOpen] = useState<boolean>(false);
   const [isStudentManagerOpen, setIsStudentManagerOpen] = useState<boolean>(false);
+  const [isAppIconModalOpen, setIsAppIconModalOpen] = useState<boolean>(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
+  const [reminderAlert, setReminderAlert] = useState<{ title: string; body: string } | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
+    return getStoredNotificationSettings().enabled;
+  });
   const [toastMessage, setToastMessage] = useState<string>('');
+
+  // Apply custom app icon to DOM on mount or when gymInfo updates
+  useEffect(() => {
+    const savedIcon = localStorage.getItem('gym_custom_app_icon') || gymInfo.appIconUrl;
+    if (savedIcon) {
+      applyAppIconToDOM(savedIcon, gymInfo.appName || 'FitSquad');
+    }
+  }, [gymInfo.appIconUrl, gymInfo.appName]);
+
+  // Periodic check (every 30 seconds) for upcoming courses starting in 1 hour
+  useEffect(() => {
+    const runCourseReminderCheck = () => {
+      const currentSchedule = getCurrentSchedule();
+      checkAndTriggerCourseReminders(currentSchedule, students);
+      setNotificationsEnabled(getStoredNotificationSettings().enabled);
+    };
+
+    runCourseReminderCheck();
+    const intervalId = setInterval(runCourseReminderCheck, 30000);
+
+    // In-app alert banner listener for course reminders
+    const handleReminderEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ title: string; body: string }>;
+      if (customEvent.detail) {
+        setReminderAlert(customEvent.detail);
+        setTimeout(() => {
+          setReminderAlert((prev) => (prev?.title === customEvent.detail.title ? null : prev));
+        }, 10000);
+      }
+    };
+
+    window.addEventListener('gym_course_reminder_alert', handleReminderEvent);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('gym_course_reminder_alert', handleReminderEvent);
+    };
+  }, [students]);
 
   // Auto-connect to Firebase and subscribe to Real-Time Cloud updates
   useEffect(() => {
@@ -295,7 +346,35 @@ export default function App() {
         gymInfo={gymInfo}
         isCloudConnected={isCloudConnected}
         onOpenGymSettings={() => setIsGymSettingsModalOpen(true)}
+        onOpenAppIconModal={() => setIsAppIconModalOpen(true)}
+        onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+        notificationsEnabled={notificationsEnabled}
       />
+
+      {/* Real-time In-App Reminder Alert Banner (1h Before Course) */}
+      {reminderAlert && (
+        <div className="fixed top-20 right-4 sm:right-6 z-50 max-w-md w-[calc(100%-2rem)] bg-slate-900/95 backdrop-blur-md border-2 border-amber-400 text-white p-4 rounded-2xl shadow-2xl flex items-start gap-3 animate-slideDown">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+            <BellRing className="w-5 h-5 animate-bounce" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black">
+                Promemoria 1h
+              </span>
+            </div>
+            <h4 className="text-sm font-black text-amber-300 mt-1">{reminderAlert.title}</h4>
+            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{reminderAlert.body}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReminderAlert(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Main Content: Timetable View & Direct Course Self-Enrollment */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 print:p-0 print:m-0 print:max-w-none print:w-full print:bg-white">
@@ -313,6 +392,26 @@ export default function App() {
         onClose={() => setIsGymSettingsModalOpen(false)}
         gymInfo={gymInfo}
         onSave={handleSaveGymInfo}
+        onOpenAppIconModal={() => setIsAppIconModalOpen(true)}
+      />
+
+      {/* App Icon Customization Modal (iPhone, iPad & Tablet) */}
+      <AppIconModal
+        isOpen={isAppIconModalOpen}
+        onClose={() => setIsAppIconModalOpen(false)}
+        gymInfo={gymInfo}
+        onSaveGymInfo={handleSaveGymInfo}
+        onShowToast={showToast}
+      />
+
+      {/* Course Notification Reminders Modal (1 Hour Before) */}
+      <CourseNotificationModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+        students={students}
+        currentStudentId={currentStudentId}
+        schedule={getCurrentSchedule()}
+        onShowToast={showToast}
       />
 
       {/* Global Toast Notification */}

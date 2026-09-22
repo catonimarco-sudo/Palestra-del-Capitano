@@ -645,6 +645,9 @@ export interface GymInfoSettings {
   roomHoursText: string;
   note1: string;
   note2: string;
+  appIconUrl?: string;
+  appIconType?: string;
+  appIconBg?: string;
 }
 
 export const DEFAULT_GYM_INFO: GymInfoSettings = {

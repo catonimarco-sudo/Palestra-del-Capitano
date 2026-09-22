@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#84cc16" />
+      <stop offset="50%" stop-color="#7cb342" />
+      <stop offset="100%" stop-color="#0288d1" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7cb342" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#7cb342" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background with subtle corner radius -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <circle cx="256" cy="256" r="210" fill="url(#glowGrad)" />
+
+  <!-- Dumbbell / Fitness Emblem -->
+  <g transform="translate(256, 256) rotate(-35) translate(-256, -256)">
+    <!-- Central Bar -->
+    <rect x="146" y="236" width="220" height="40" rx="20" fill="url(#primaryGrad)" />
+    <!-- Collars -->
+    <rect x="176" y="216" width="24" height="80" rx="10" fill="#a3e635" />
+    <rect x="312" y="216" width="24" height="80" rx="10" fill="#a3e635" />
+    <!-- Inner Plates -->
+    <rect x="116" y="186" width="46" height="140" rx="16" fill="url(#primaryGrad)" />
+    <rect x="350" y="186" width="46" height="140" rx="16" fill="url(#primaryGrad)" />
+    <!-- Outer Plates -->
+    <rect x="66" y="156" width="38" height="200" rx="14" fill="#65a30d" />
+    <rect x="408" y="156" width="38" height="200" rx="14" fill="#0288d1" />
+  </g>
+
+  <!-- Gym Brand Lettering / Accent -->
+  <text x="256" y="445" font-family="-apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', sans-serif" font-weight="900" font-size="44" fill="#f8fafc" text-anchor="middle" letter-spacing="4">FITSQUAD</text>
+  <text x="256" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="20" fill="#7cb342" text-anchor="middle" letter-spacing="3">HOF FITNESS</text>
+</svg>
