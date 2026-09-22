@@ -46,11 +46,11 @@ export type DayKey = 'lunedi' | 'martedi' | 'mercoledi' | 'giovedi' | 'venerdi';
 
 interface GymScheduleViewProps {
   students: Allievo[];
-  currentStudentId: string | null;
+  currentStudentId?: string | null;
   userRole?: UserRole;
-  onSelectCurrentStudent: (id: string | null) => void;
+  onSelectCurrentStudent?: (id: string | null) => void;
   onAddStudent: (name: string, phone?: string) => Allievo;
-  onOpenStudentManager: () => void;
+  onOpenStudentManager?: () => void;
   gymInfo: GymInfoSettings;
   onOpenGymSettings: () => void;
 }
@@ -87,7 +87,6 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
   const [selectedCategory, setSelectedCategory] = useState<GymCourseCategory | 'all'>('all');
   const [selectedAudienceFilter, setSelectedAudienceFilter] = useState<TargetAudience | 'all'>('all');
-  const [selectedStudentFilter, setSelectedStudentFilter] = useState<string | 'all'>('all');
   const [themeMode, setThemeMode] = useState<'poster' | 'dark'>('poster');
 
   // Category Colors state (persisted in localStorage)
@@ -121,9 +120,10 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     time: string;
   } | null>(null);
 
-  // Quick student add state inside course detail modal
-  const [quickNewStudentName, setQuickNewStudentName] = useState('');
-  const [selectedExistingToEnroll, setSelectedExistingToEnroll] = useState('');
+  // Autonomous self-enrollment state (Nome, Cognome, Telefono facoltativo)
+  const [enrollFirstName, setEnrollFirstName] = useState('');
+  const [enrollLastName, setEnrollLastName] = useState('');
+  const [enrollPhone, setEnrollPhone] = useState('');
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -337,31 +337,103 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     saveSchedule(updated);
   };
 
-  // Quick add new student and immediately enroll them into current course
-  const handleQuickAddAndEnroll = (e: React.FormEvent) => {
+  // Autonomous direct self-enrollment by student (Nome, Cognome, Telefono facoltativo)
+  const handleDirectSelfEnroll = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickNewStudentName.trim() || !activeCourseDetail) return;
+    if (!activeCourseDetail) return;
+    const fName = enrollFirstName.trim();
+    const lName = enrollLastName.trim();
+    const phone = enrollPhone.trim();
 
-    const newStudent = onAddStudent(quickNewStudentName.trim());
-    setQuickNewStudentName('');
+    if (!fName || !lName) {
+      showToast('⚠️ Inserisci sia il Nome che il Cognome per registrarti.');
+      return;
+    }
 
-    // Now enroll into course
-    handleToggleEnrollment(
-      activeCourseDetail.rowId,
-      activeCourseDetail.dayKey,
-      newStudent.id
-    );
+    const fullName = `${fName} ${lName}`;
+
+    // Find existing student or add new one
+    let student = students.find((s) => s.name.toLowerCase() === fullName.toLowerCase());
+    if (!student) {
+      student = onAddStudent(fullName, phone || undefined);
+    }
+
+    const currentEnrolled = activeCourseDetail.cell.enrolledMemberIds || [];
+    if (currentEnrolled.includes(student.id)) {
+      showToast('⚠️ Sei già iscritto/a a questa lezione!');
+      return;
+    }
+
+    const nextEnrolled = [...currentEnrolled, student.id];
+    const updatedCell: GymScheduleCell = {
+      ...activeCourseDetail.cell,
+      enrolledMemberIds: nextEnrolled,
+    };
+
+    const updatedSchedule = schedule.map((row) => {
+      if (row.rowId !== activeCourseDetail.rowId) return row;
+      return {
+        ...row,
+        days: {
+          ...row.days,
+          [activeCourseDetail.dayKey]: updatedCell,
+        },
+      };
+    });
+
+    saveSchedule(updatedSchedule);
+
+    setActiveCourseDetail({
+      ...activeCourseDetail,
+      cell: updatedCell,
+    });
+
+    setEnrollFirstName('');
+    setEnrollLastName('');
+    setEnrollPhone('');
+
+    try {
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#7cb342', '#0288d1', '#e91e63'],
+      });
+    } catch {}
+
+    showToast(`🎉 Iscrizione confermata per ${fullName}!`);
   };
 
-  // Enroll an existing student from dropdown
-  const handleEnrollExisting = () => {
-    if (!selectedExistingToEnroll || !activeCourseDetail) return;
-    handleToggleEnrollment(
-      activeCourseDetail.rowId,
-      activeCourseDetail.dayKey,
-      selectedExistingToEnroll
-    );
-    setSelectedExistingToEnroll('');
+  // Remove presence from course
+  const handleRemoveEnrollment = (studentId: string) => {
+    if (!activeCourseDetail) return;
+    const currentEnrolled = activeCourseDetail.cell.enrolledMemberIds || [];
+    const nextEnrolled = currentEnrolled.filter((id) => id !== studentId);
+
+    const updatedCell: GymScheduleCell = {
+      ...activeCourseDetail.cell,
+      enrolledMemberIds: nextEnrolled,
+    };
+
+    const updatedSchedule = schedule.map((row) => {
+      if (row.rowId !== activeCourseDetail.rowId) return row;
+      return {
+        ...row,
+        days: {
+          ...row.days,
+          [activeCourseDetail.dayKey]: updatedCell,
+        },
+      };
+    });
+
+    saveSchedule(updatedSchedule);
+
+    setActiveCourseDetail({
+      ...activeCourseDetail,
+      cell: updatedCell,
+    });
+
+    showToast('Presenza rimossa dalla lezione.');
   };
 
   // Save new or edited course
@@ -452,8 +524,6 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     setActiveCourseDetail(null);
     showToast('Lezione rimossa dal calendario.');
   };
-
-  const currentStudent = students.find((s) => s.id === currentStudentId);
 
   return (
     <div className="space-y-5 animate-fadeIn pb-12">
@@ -572,39 +642,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
             </button>
           </div>
 
-          {/* Filter by enrolled student */}
-          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 text-xs">
-            <User className="w-3.5 h-3.5 text-emerald-400" />
-            <select
-              value={selectedStudentFilter}
-              onChange={(e) => setSelectedStudentFilter(e.target.value)}
-              className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-slate-900">Tutti gli Allievi</option>
-              {currentStudentId && (
-                <option value={currentStudentId} className="bg-slate-900 text-emerald-400">
-                  Solo corsi di: {currentStudent?.name}
-                </option>
-              )}
-              {students
-                .filter((s) => s.id !== currentStudentId)
-                .map((s) => (
-                  <option key={s.id} value={s.id} className="bg-slate-900">
-                    Solo corsi di: {s.name}
-                  </option>
-                ))}
-            </select>
-          </div>
 
-          {/* Manage Students button */}
-          <button
-            onClick={onOpenStudentManager}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors border border-slate-700 text-xs font-bold"
-            title={isGestore ? "Gestisci elenco allievi, profili, schede e presenze" : "Visualizza allievi"}
-          >
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Allievi ({students.length})</span>
-          </button>
 
           {/* Edit Gym Info Button (Solo Gestore) */}
           {isGestore && (
@@ -770,16 +808,9 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                       (cell.targetAudience || 'allievi') !== selectedAudienceFilter &&
                       cell.targetAudience !== 'tutti';
                     const enrolledCount = (cell.enrolledMemberIds || []).length;
-                    const isCurrentStudentEnrolled = currentStudentId
-                      ? (cell.enrolledMemberIds || []).includes(currentStudentId)
-                      : false;
-                    const isFilterStudentEnrolled =
-                      selectedStudentFilter !== 'all'
-                        ? (cell.enrolledMemberIds || []).includes(selectedStudentFilter)
-                        : true;
 
                     const opacityClass =
-                      isCategoryFiltered || !isFilterStudentEnrolled || isAudienceFiltered
+                      isCategoryFiltered || isAudienceFiltered
                         ? 'opacity-20 grayscale scale-[0.98]'
                         : 'opacity-100 scale-100';
 
@@ -795,12 +826,27 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                           })
                         }
                         style={{ backgroundColor: effectiveCellColor }}
-                        className={`col-span-2 rounded-xl p-2 min-h-[44px] flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm hover:shadow-md relative group select-none text-white ${opacityClass} print:opacity-100 print:shadow-none`}
-                        title="Clicca per iscriverti, toglierti o visualizzare i dettagli"
+                        className={`col-span-2 rounded-xl p-2 min-h-[44px] flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 hover:scale-[1.03] shadow-sm hover:shadow-lg relative group select-none text-white ${opacityClass} print:opacity-100 print:shadow-none`}
+                        title={`Corso: ${cell.name} • Istruttore: ${cell.instructor || 'Staff Palestra'} (Clicca per iscriverti)`}
                       >
-                        {/* Course Name in clean bold uppercase font as in the image */}
+                        {/* Tooltip con info Istruttore al passaggio del mouse */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none transition-all duration-150 animate-in fade-in">
+                          <div className="bg-slate-950/95 text-white text-[11px] px-3 py-1.5 rounded-xl shadow-2xl border border-slate-700 whitespace-nowrap flex items-center gap-1.5 font-bold backdrop-blur-md">
+                            <User className="w-3.5 h-3.5 text-[#7cb342] shrink-0" />
+                            <span>Istruttore: <strong className="text-[#7cb342] font-black">{cell.instructor || 'Staff Palestra'}</strong></span>
+                          </div>
+                          <div className="w-2 h-2 bg-slate-950 border-r border-b border-slate-700 rotate-45 -mt-1" />
+                        </div>
+
+                        {/* Course Name in clean bold uppercase font */}
                         <span className="font-black text-xs sm:text-sm tracking-wide leading-tight px-1 uppercase drop-shadow-sm">
                           {cell.name}
+                        </span>
+
+                        {/* Instructor visible under course name */}
+                        <span className="text-[10px] opacity-90 font-medium truncate max-w-full px-1 text-slate-100 flex items-center justify-center gap-1 mt-0.5">
+                          <User className="w-2.5 h-2.5 opacity-80 shrink-0" />
+                          <span className="truncate">{cell.instructor || 'Staff'}</span>
                         </span>
 
                         {/* Badges container */}
@@ -812,19 +858,11 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                             </span>
                           )}
 
-                          {/* If current selected student is enrolled */}
-                          {isCurrentStudentEnrolled && (
-                            <span className="bg-emerald-950/80 text-emerald-200 border border-emerald-400/50 rounded-full text-[9px] font-black px-1.5 py-0.2 flex items-center gap-0.5 shadow-sm">
-                              <Check className="w-2.5 h-2.5 stroke-[3]" />
-                              <span>Tu iscritto</span>
-                            </span>
-                          )}
-
                           {/* Enrolled count pill badge */}
                           {enrolledCount > 0 && (
-                            <div className="bg-black/40 text-white rounded-full text-[9px] font-black px-1.5 py-0.2 backdrop-blur-xs flex items-center gap-0.5">
-                              <Users className="w-2.5 h-2.5" />
-                              <span>{enrolledCount}</span>
+                            <div className="bg-black/50 text-white rounded-full text-[9px] font-black px-1.5 py-0.2 backdrop-blur-xs flex items-center gap-0.5 shadow-sm">
+                              <Users className="w-2.5 h-2.5 text-[#7cb342]" />
+                              <span>{enrolledCount} {enrolledCount === 1 ? 'iscritto' : 'iscritti'}</span>
                             </div>
                           )}
                         </div>
@@ -1115,15 +1153,21 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
               {/* Quick Info Grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block font-medium text-[11px]">Istruttore</span>
-                  <span className="text-white font-bold">
-                    {activeCourseDetail.cell.instructor || 'Staff HOF'}
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block font-medium text-[11px] flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-[#7cb342]" />
+                    Istruttore Corso
+                  </span>
+                  <span className="text-white font-black text-sm mt-0.5 block">
+                    {activeCourseDetail.cell.instructor || 'Staff Palestra'}
                   </span>
                 </div>
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block font-medium text-[11px]">Sala / Area</span>
-                  <span className="text-white font-bold">
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block font-medium text-[11px] flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-[#7cb342]" />
+                    Sala / Area
+                  </span>
+                  <span className="text-white font-black text-sm mt-0.5 block">
                     {activeCourseDetail.cell.room || 'Area Fitness'}
                   </span>
                 </div>
@@ -1193,149 +1237,77 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                 </div>
               )}
 
-              {/* 1. SEZIONE AZIONE ALLIEVO ATTIVO (INSERIRSI O TOGLIERSI) */}
-              <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-950 to-slate-900 border border-slate-700/80 shadow-md">
-                <span className="text-xs font-black text-slate-300 uppercase tracking-wider block mb-2">
-                  La tua presenza a questo corso:
-                </span>
+              {/* MODULO ISCRIZIONE DIRETTA ALLIEVO */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-emerald-500/40 shadow-xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <UserPlus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-white">Iscrizione alla lezione</h4>
+                    <p className="text-[11px] text-slate-400">Inserisci i tuoi dati per registrarti a questo orario:</p>
+                  </div>
+                </div>
 
-                {currentStudent ? (
-                  /* Case A: An allievo is active/selected */
-                  (() => {
-                    const isEnrolled = (
-                      activeCourseDetail.cell.enrolledMemberIds || []
-                    ).includes(currentStudent.id);
-
-                    // If it's a Mister course and not Gestore, student cannot add themselves unless already enrolled (they can unenroll)
-                    const isMisterCourse = activeCourseDetail.cell.targetAudience === 'mister';
-                    const canStudentEnroll = isGestore || !isMisterCourse;
-
-                    return (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-slate-800 text-white font-bold text-xs flex items-center justify-center">
-                              {currentStudent.name.charAt(0)}
-                            </div>
-                            <span className="font-bold text-sm text-white">
-                              {currentStudent.name}
-                            </span>
-                          </div>
-                          {isEnrolled ? (
-                            <span className="text-xs font-black px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5" />
-                              Presente / Iscritto
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">
-                              Non inserito
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Button logic */}
-                        {isEnrolled ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleEnrollment(
-                                activeCourseDetail.rowId,
-                                activeCourseDetail.dayKey,
-                                currentStudent.id
-                              )
-                            }
-                            className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 active:scale-98"
-                          >
-                            <UserX className="w-4 h-4" />
-                            <span>❌ Elimina la tua presenza da questo corso</span>
-                          </button>
-                        ) : canStudentEnroll ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleEnrollment(
-                                activeCourseDetail.rowId,
-                                activeCourseDetail.dayKey,
-                                currentStudent.id
-                              )
-                            }
-                            className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-98"
-                          >
-                            <UserCheck className="w-4 h-4" />
-                            <span>➕ Inserisci la tua presenza a questo corso</span>
-                          </button>
-                        ) : (
-                          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
-                            🔒 Corso riservato ai Mister. Non è possibile inserire presenze per allievi in questa sessione.
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : (
-                  /* Case B: No allievo currently selected -> allow selecting one right here */
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-400">
-                      Seleziona il tuo profilo allievo per inserire o rimuovere la tua presenza:
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            onSelectCurrentStudent(e.target.value);
-                          }
-                        }}
-                        defaultValue=""
-                        className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-bold focus:outline-none"
-                      >
-                        <option value="" disabled>
-                          -- Seleziona il tuo Profilo Allievo --
-                        </option>
-                        {students.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
+                <form onSubmit={handleDirectSelfEnroll} className="space-y-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                        Nome <span className="text-emerald-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={enrollFirstName}
+                        onChange={(e) => setEnrollFirstName(e.target.value)}
+                        placeholder="Es. Mario"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold placeholder:text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                        Cognome <span className="text-emerald-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={enrollLastName}
+                        onChange={(e) => setEnrollLastName(e.target.value)}
+                        placeholder="Es. Rossi"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold placeholder:text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
                     </div>
                   </div>
-                )}
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Telefono <span className="text-slate-500 font-normal lowercase">(facoltativo)</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={enrollPhone}
+                      onChange={(e) => setEnrollPhone(e.target.value)}
+                      placeholder="Es. 335 1234567"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold placeholder:text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#7cb342] hover:bg-[#689f38] text-slate-950 font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#7cb342]/20 active:scale-98"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Conferma Iscrizione</span>
+                  </button>
+                </form>
               </div>
 
-              {/* 2. SEZIONE INSERISCI NOME NUOVO ALLIEVO & ISCRIVILO (Solo Gestore) */}
-              {isGestore && (
-                <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
-                  <span className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <UserPlus className="w-4 h-4" />
-                    Inserisci Nuovo Allievo e Registra Presenza (Solo Gestore)
-                  </span>
-                  <form onSubmit={handleQuickAddAndEnroll} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      required
-                      value={quickNewStudentName}
-                      onChange={(e) => setQuickNewStudentName(e.target.value)}
-                      placeholder="Nome e Cognome allievo..."
-                      className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-emerald-500 focus:outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3.5 py-2 rounded-xl bg-[#7cb342] hover:bg-[#689f38] text-slate-950 font-black text-xs shrink-0 flex items-center gap-1 shadow-md shadow-[#7cb342]/20"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Iscrivi</span>
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* 3. LISTA DI TUTTI GLI ALLIEVI ISCRITTI A QUESTA LEZIONE */}
+              {/* LISTA DEI PARTECIPANTI ISCRITTI */}
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-emerald-400" />
-                    Allievi Iscritti a questa lezione (
-                    {(activeCourseDetail.cell.enrolledMemberIds || []).length})
+                    Partecipanti Iscritti ({(activeCourseDetail.cell.enrolledMemberIds || []).length})
                   </span>
                 </div>
 
@@ -1348,17 +1320,10 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                   ) : (
                     (activeCourseDetail.cell.enrolledMemberIds || []).map((studentId) => {
                       const student = students.find((s) => s.id === studentId);
-                      const isCurrent = studentId === currentStudentId;
-                      const canRemove = isGestore || isCurrent;
-
                       return (
                         <div
                           key={studentId}
-                          className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
-                            isCurrent
-                              ? 'bg-emerald-500/10 border-emerald-500/40'
-                              : 'bg-slate-900 border-slate-800'
-                          }`}
+                          className="flex items-center justify-between p-2.5 rounded-xl border bg-slate-900 border-slate-800 transition-all hover:border-slate-700"
                         >
                           <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-white font-bold text-xs">
@@ -1366,72 +1331,32 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                             </div>
                             <div>
                               <span className="font-bold text-xs text-white block">
-                                {student?.name || 'Allievo rimosso'}{' '}
-                                {isCurrent && (
-                                  <span className="text-[10px] text-emerald-400 font-semibold">
-                                    (Tu)
-                                  </span>
-                                )}
+                                {student?.name || 'Allievo registrato'}
                               </span>
+                              {student?.phone && (
+                                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                  <Phone className="w-2.5 h-2.5" />
+                                  <span>{student.phone}</span>
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          {/* Button to remove/disenroll this student */}
-                          {canRemove && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleEnrollment(
-                                  activeCourseDetail.rowId,
-                                  activeCourseDetail.dayKey,
-                                  studentId
-                                )
-                              }
-                              className="px-2.5 py-1 rounded-lg bg-rose-900/30 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 text-[11px] font-bold flex items-center gap-1 transition-colors"
-                              title={isGestore ? "Togli allievo da questo corso" : "Elimina la tua presenza da questo corso"}
-                            >
-                              <X className="w-3 h-3" />
-                              <span>{isCurrent ? 'Elimina la mia presenza' : 'Togli'}</span>
-                            </button>
-                          )}
+                          {/* Button to remove enrollment */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEnrollment(studentId)}
+                            className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                            title="Rimuovi presenza da questa lezione"
+                          >
+                            <X className="w-3 h-3" />
+                            <span>Rimuovi</span>
+                          </button>
                         </div>
                       );
                     })
                   )}
                 </div>
-
-                {/* Enroll another existing student dropdown (Solo Gestore) */}
-                {isGestore && students.filter(
-                  (s) => !(activeCourseDetail.cell.enrolledMemberIds || []).includes(s.id)
-                ).length > 0 && (
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
-                    <select
-                      value={selectedExistingToEnroll}
-                      onChange={(e) => setSelectedExistingToEnroll(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none"
-                    >
-                      <option value="">Iscrivi un altro allievo...</option>
-                      {students
-                        .filter(
-                          (s) =>
-                            !(activeCourseDetail.cell.enrolledMemberIds || []).includes(s.id)
-                        )
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!selectedExistingToEnroll}
-                      onClick={handleEnrollExisting}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-emerald-400 font-bold text-xs"
-                    >
-                      + Iscrivi
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 

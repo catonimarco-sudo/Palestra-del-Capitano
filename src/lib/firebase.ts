@@ -87,6 +87,11 @@ export function initAuth(onUserReady?: (user: User | null) => void) {
 // REAL-TIME FIRESTORE SERVICES
 // ==========================================
 
+// Helper to recursively strip undefined properties since Firestore setDoc rejects undefined
+function sanitizeForFirestore<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
 // 1. Weekly Schedule
 export function subscribeToSchedule(
   onData: (schedule: GymScheduleRow[]) => void,
@@ -111,7 +116,7 @@ export function subscribeToSchedule(
       // If not in cloud yet, seed with initial data from local/props
       try {
         await setDoc(scheduleDocRef, {
-          rows: initialFallback,
+          rows: sanitizeForFirestore(initialFallback),
           updatedAt: new Date().toISOString(),
         });
         onData(initialFallback);
@@ -134,10 +139,11 @@ export async function saveScheduleToCloud(schedule: GymScheduleRow[]) {
   } catch {}
 
   const scheduleDocRef = doc(db, 'gym_schedule', 'weekly');
+  const sanitizedRows = sanitizeForFirestore(schedule);
   await setDoc(
     scheduleDocRef,
     {
-      rows: schedule,
+      rows: sanitizedRows,
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
@@ -187,7 +193,7 @@ export function subscribeToStudents(
 }
 
 export async function saveStudentToCloud(student: Allievo) {
-  await setDoc(doc(db, 'gym_students', student.id), student, { merge: true });
+  await setDoc(doc(db, 'gym_students', student.id), sanitizeForFirestore(student), { merge: true });
 }
 
 export async function deleteStudentFromCloud(studentId: string) {
@@ -218,7 +224,7 @@ export function subscribeToGymInfo(
       // Seed if not present
       try {
         await setDoc(infoDocRef, {
-          info: initialFallback,
+          info: sanitizeForFirestore(initialFallback),
           updatedAt: new Date().toISOString(),
         });
         onData(initialFallback);
@@ -242,7 +248,7 @@ export async function saveGymInfoToCloud(info: GymInfoSettings) {
   await setDoc(
     infoDocRef,
     {
-      info,
+      info: sanitizeForFirestore(info),
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
@@ -274,7 +280,7 @@ export function subscribeToCategoryColors(
       // Seed if not present
       try {
         await setDoc(colorsDocRef, {
-          colors: initialFallback,
+          colors: sanitizeForFirestore(initialFallback),
           updatedAt: new Date().toISOString(),
         });
         onData(initialFallback);
@@ -298,7 +304,7 @@ export async function saveCategoryColorsToCloud(colors: Record<GymCourseCategory
   await setDoc(
     colorsDocRef,
     {
-      colors,
+      colors: sanitizeForFirestore(colors),
       updatedAt: new Date().toISOString(),
     },
     { merge: true }

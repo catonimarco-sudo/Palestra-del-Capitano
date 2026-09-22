@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { GymScheduleView } from './components/GymScheduleView';
 import { GymSettingsModal } from './components/GymSettingsModal';
-import { StudentManagerModal } from './components/StudentManagerModal';
 import { DEFAULT_GYM_INFO, GymInfoSettings, INITIAL_GYM_SCHEDULE, GymScheduleRow } from './data/gymScheduleData';
 import { Allievo, UserRole } from './types';
 import confetti from 'canvas-confetti';
@@ -291,53 +290,22 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-[#7cb342] selection:text-slate-950">
-      {/* Sticky Navigation Header with Role Switcher & Student Dropdown */}
+      {/* Navigation Header */}
       <Header
         gymInfo={gymInfo}
-        userRole={userRole}
         isCloudConnected={isCloudConnected}
-        onSelectUserRole={setUserRole}
         onOpenGymSettings={() => setIsGymSettingsModalOpen(true)}
-        students={students}
-        currentStudentId={currentStudentId}
-        onSelectStudent={setCurrentStudentId}
-        onAddStudent={handleAddStudent}
-        onDeleteStudent={handleDeleteStudent}
-        onOpenStudentManager={() => setIsStudentManagerOpen(true)}
       />
 
-      {/* Main Content: Timetable View & Student Course Enrollment */}
+      {/* Main Content: Timetable View & Direct Course Self-Enrollment */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <GymScheduleView
           students={students}
-          currentStudentId={currentStudentId}
-          userRole={userRole}
-          onSelectCurrentStudent={setCurrentStudentId}
           onAddStudent={handleAddStudent}
-          onOpenStudentManager={() => setIsStudentManagerOpen(true)}
           gymInfo={gymInfo}
           onOpenGymSettings={() => setIsGymSettingsModalOpen(true)}
         />
       </main>
-
-      {/* Student Manager Modal: Inserisci Nomi Allievi, Visualizza Corsi e Gestione */}
-      <StudentManagerModal
-        isOpen={isStudentManagerOpen}
-        onClose={() => setIsStudentManagerOpen(false)}
-        students={students}
-        userRole={userRole}
-        onAddStudent={handleAddStudent}
-        onEditStudent={handleEditStudent}
-        onDeleteStudent={handleDeleteStudent}
-        currentStudentId={currentStudentId}
-        onSelectCurrentStudent={(id) => {
-          setCurrentStudentId(id);
-          setIsStudentManagerOpen(false);
-          const st = students.find((s) => s.id === id);
-          if (st) showToast(`Selezionato: ${st.name}`);
-        }}
-        schedule={getCurrentSchedule()}
-      />
 
       {/* Gym Settings & Branding Modal */}
       <GymSettingsModal
