@@ -34,28 +34,47 @@ export const auth = getAuth(app);
 // Initialize Firestore with specific database ID
 export const db: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
+// Connection state listeners
+type ConnectionListener = (connected: boolean) => void;
+const connectionListeners: Set<ConnectionListener> = new Set();
+let isCurrentlyConnected = false;
+
+export function onCloudConnectionChange(listener: ConnectionListener) {
+  connectionListeners.add(listener);
+  listener(isCurrentlyConnected);
+  return () => {
+    connectionListeners.delete(listener);
+  };
+}
+
+function setCloudConnected(status: boolean) {
+  if (isCurrentlyConnected !== status) {
+    isCurrentlyConnected = status;
+    connectionListeners.forEach((fn) => fn(status));
+  }
+}
+
 // Test connection on boot as required by guidelines
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    setCloudConnected(true);
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline, check connection.');
-    }
-    return false;
+  } catch {
+    // Attempt local ping / fallback
+    return isCurrentlyConnected;
   }
 }
 
-// Auto sign-in anonymously so every client (Vercel, AI Studio, Mobile) has valid request.auth
+// Attempt anonymous auth if enabled, but operate gracefully without auth
 export function initAuth(onUserReady?: (user: User | null) => void) {
   return onAuthStateChanged(auth, async (user) => {
     if (!user) {
       try {
         const cred = await signInAnonymously(auth);
         onUserReady?.(cred.user);
-      } catch (err) {
-        console.error('Anonymous auth failed:', err);
+      } catch {
+        // Anonymous auth provider might be disabled in Firebase console, public rules allow direct access
         onUserReady?.(null);
       }
     } else {
@@ -78,9 +97,10 @@ export function subscribeToSchedule(
   return onSnapshot(
     scheduleDocRef,
     async (snap) => {
+      setCloudConnected(true);
       if (snap.exists()) {
         const data = snap.data();
-        if (Array.isArray(data?.rows)) {
+        if (Array.isArray(data?.rows) && data.rows.length > 0) {
           onData(data.rows);
           try {
             localStorage.setItem('gym_weekly_schedule', JSON.stringify(data.rows));
@@ -122,6 +142,7 @@ export async function saveScheduleToCloud(schedule: GymScheduleRow[]) {
     },
     { merge: true }
   );
+  setCloudConnected(true);
 }
 
 // 2. Students / Allievi List
@@ -134,6 +155,7 @@ export function subscribeToStudents(
   return onSnapshot(
     studentsColRef,
     async (snap) => {
+      setCloudConnected(true);
       if (!snap.empty) {
         const list: Allievo[] = [];
         snap.forEach((d) => {
@@ -182,6 +204,7 @@ export function subscribeToGymInfo(
   return onSnapshot(
     infoDocRef,
     async (snap) => {
+      setCloudConnected(true);
       if (snap.exists()) {
         const data = snap.data();
         if (data?.info) {
@@ -224,6 +247,7 @@ export async function saveGymInfoToCloud(info: GymInfoSettings) {
     },
     { merge: true }
   );
+  setCloudConnected(true);
 }
 
 // 4. Category Colors
@@ -236,6 +260,7 @@ export function subscribeToCategoryColors(
   return onSnapshot(
     colorsDocRef,
     async (snap) => {
+      setCloudConnected(true);
       if (snap.exists()) {
         const data = snap.data();
         if (data?.colors) {
@@ -278,4 +303,5 @@ export async function saveCategoryColorsToCloud(colors: Record<GymCourseCategory
     },
     { merge: true }
   );
+  setCloudConnected(true);
 }

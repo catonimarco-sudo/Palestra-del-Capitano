@@ -10,6 +10,7 @@ import { Dumbbell } from 'lucide-react';
 import {
   initAuth,
   testFirestoreConnection,
+  onCloudConnectionChange,
   subscribeToGymInfo,
   saveGymInfoToCloud,
   subscribeToStudents,
@@ -89,12 +90,12 @@ export default function App() {
 
   // Auto-connect to Firebase and subscribe to Real-Time Cloud updates
   useEffect(() => {
-    // 1. Authenticate anonymously for seamless multi-client access across Vercel & AI Studio
-    const unsubAuth = initAuth((user) => {
-      if (user) {
-        setIsCloudConnected(true);
-      }
+    // 1. Connection listener & Auth
+    const unsubConn = onCloudConnectionChange((connected) => {
+      setIsCloudConnected(connected);
     });
+
+    const unsubAuth = initAuth();
 
     testFirestoreConnection();
 
@@ -115,6 +116,7 @@ export default function App() {
     }, students);
 
     return () => {
+      unsubConn();
       unsubAuth();
       unsubInfo();
       unsubStudents();

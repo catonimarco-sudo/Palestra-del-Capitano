@@ -35,6 +35,12 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import {
+  subscribeToSchedule,
+  saveScheduleToCloud,
+  subscribeToCategoryColors,
+  saveCategoryColorsToCloud,
+} from '../lib/firebase';
 
 export type DayKey = 'lunedi' | 'martedi' | 'mercoledi' | 'giovedi' | 'venerdi';
 
@@ -133,6 +139,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       try {
         localStorage.setItem('gym_category_colors', JSON.stringify(updated));
       } catch {}
+      saveCategoryColorsToCloud(updated).catch(() => {});
       return updated;
     });
     showToast(`Colore per ${GYM_CATEGORIES[cat].name} aggiornato!`);
@@ -151,6 +158,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     try {
       localStorage.removeItem('gym_category_colors');
     } catch {}
+    saveCategoryColorsToCloud(defaults).catch(() => {});
     showToast('Colori categorie ripristinati ai valori originali.');
   };
 
@@ -190,13 +198,32 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     showToast(newHexColor ? 'Colore corso aggiornato!' : 'Colore ripristinato a quello di categoria.');
   };
 
-  // Save changes to localStorage
+  // Save changes to localStorage and Firestore in real-time
   const saveSchedule = (newSchedule: GymScheduleRow[]) => {
     setSchedule(newSchedule);
     try {
       localStorage.setItem('gym_weekly_schedule', JSON.stringify(newSchedule));
     } catch {}
+    saveScheduleToCloud(newSchedule).catch((err) => {
+      console.warn('Could not save schedule to cloud:', err);
+    });
   };
+
+  // Subscribe to real-time Schedule updates from Firestore
+  useEffect(() => {
+    const unsub = subscribeToSchedule((cloudSchedule) => {
+      setSchedule(cloudSchedule);
+    }, schedule);
+    return () => unsub();
+  }, []);
+
+  // Subscribe to real-time Category Colors updates from Firestore
+  useEffect(() => {
+    const unsub = subscribeToCategoryColors((cloudColors) => {
+      setCategoryColors(cloudColors);
+    }, categoryColors);
+    return () => unsub();
+  }, []);
 
   // Sync schedule if an allievo was deleted or schedule was updated externally
   useEffect(() => {
@@ -215,8 +242,9 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     };
   }, []);
 
-  // Ensure schedule does not keep IDs of deleted students
+  // Ensure schedule does not keep IDs of deleted students (only if students list is loaded)
   useEffect(() => {
+    if (!students || students.length === 0) return;
     const studentIds = new Set(students.map((s) => s.id));
     setSchedule((prev) => {
       let changed = false;
