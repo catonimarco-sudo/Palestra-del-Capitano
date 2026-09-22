@@ -8,8 +8,9 @@ import {
   GymInfoSettings,
   AVAILABLE_COLORS,
 } from '../data/gymScheduleData';
-import { Allievo, UserRole, TargetAudience } from '../types';
+import { Allievo, UserRole } from '../types';
 import { GymScheduleModal } from './GymScheduleModal';
+import { DailyAttendanceModal } from './DailyAttendanceModal';
 import {
   Printer,
   Plus,
@@ -86,7 +87,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
   });
 
   const [selectedCategory, setSelectedCategory] = useState<GymCourseCategory | 'all'>('all');
-  const [selectedAudienceFilter, setSelectedAudienceFilter] = useState<TargetAudience | 'all'>('all');
+  const [isDailyAttendanceModalOpen, setIsDailyAttendanceModalOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<'poster' | 'dark'>('poster');
 
   // Category Colors state (persisted in localStorage)
@@ -602,45 +603,16 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
         {/* Member filter & Actions */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          {/* Target Audience Filter (Allievi vs Mister) */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-            <button
-              type="button"
-              onClick={() => setSelectedAudienceFilter('all')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                selectedAudienceFilter === 'all'
-                  ? 'bg-slate-800 text-white font-black'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Mostra tutti i corsi (Allievi e Mister)"
-            >
-              Tutti i Corsi
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedAudienceFilter('allievi')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                selectedAudienceFilter === 'allievi'
-                  ? 'bg-emerald-600 text-white font-black'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Visualizza solo i corsi per allievi"
-            >
-              🎓 Corsi Allievi
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedAudienceFilter('mister')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                selectedAudienceFilter === 'mister'
-                  ? 'bg-amber-500 text-slate-950 font-black'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Visualizza solo i corsi per Mister"
-            >
-              🏆 Corsi per Mister
-            </button>
-          </div>
+          {/* Pulsante Presenze Giornaliere: "presenti al corso di..." */}
+          <button
+            type="button"
+            onClick={() => setIsDailyAttendanceModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md shadow-emerald-900/30 transition-all hover:scale-102 border border-emerald-400/40"
+            title="Visualizza la lista degli allievi presenti giornalmente a ciascun corso"
+          >
+            <Users className="w-4 h-4 text-white" />
+            <span>Presenze Giornaliere Corsi</span>
+          </button>
 
 
 
@@ -803,16 +775,17 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                       catMeta.hexColor;
                     const isCategoryFiltered =
                       selectedCategory !== 'all' && cell.category !== selectedCategory;
-                    const isAudienceFiltered =
-                      selectedAudienceFilter !== 'all' &&
-                      (cell.targetAudience || 'allievi') !== selectedAudienceFilter &&
-                      cell.targetAudience !== 'tutti';
                     const enrolledCount = (cell.enrolledMemberIds || []).length;
 
                     const opacityClass =
-                      isCategoryFiltered || isAudienceFiltered
+                      isCategoryFiltered
                         ? 'opacity-20 grayscale scale-[0.98]'
                         : 'opacity-100 scale-100';
+
+                    const enrolledStudentNames = (cell.enrolledMemberIds || [])
+                      .map((id) => students.find((s) => s.id === id)?.name)
+                      .filter(Boolean)
+                      .join(', ');
 
                     return (
                       <div
@@ -827,13 +800,19 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                         }
                         style={{ backgroundColor: effectiveCellColor }}
                         className={`col-span-2 rounded-xl p-2 min-h-[44px] flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 hover:scale-[1.03] shadow-sm hover:shadow-lg relative group select-none text-white ${opacityClass} print:opacity-100 print:shadow-none`}
-                        title={`Corso: ${cell.name} • Istruttore: ${cell.instructor || 'Staff Palestra'} (Clicca per iscriverti)`}
+                        title={`Corso: ${cell.name} • Istruttore: ${cell.instructor || 'Staff Palestra'}${enrolledStudentNames ? ` • Presenti: ${enrolledStudentNames}` : ''} (Clicca per iscriverti)`}
                       >
-                        {/* Tooltip con info Istruttore al passaggio del mouse */}
+                        {/* Tooltip con info Istruttore e Presenti al passaggio del mouse */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none transition-all duration-150 animate-in fade-in">
-                          <div className="bg-slate-950/95 text-white text-[11px] px-3 py-1.5 rounded-xl shadow-2xl border border-slate-700 whitespace-nowrap flex items-center gap-1.5 font-bold backdrop-blur-md">
-                            <User className="w-3.5 h-3.5 text-[#7cb342] shrink-0" />
-                            <span>Istruttore: <strong className="text-[#7cb342] font-black">{cell.instructor || 'Staff Palestra'}</strong></span>
+                          <div className="bg-slate-950/95 text-white text-[11px] px-3 py-2 rounded-xl shadow-2xl border border-slate-700 whitespace-nowrap flex flex-col gap-1 font-bold backdrop-blur-md max-w-xs text-left">
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-[#7cb342] shrink-0" />
+                              <span>Istruttore: <strong className="text-[#7cb342] font-black">{cell.instructor || 'Staff Palestra'}</strong></span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-300">
+                              <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Presenti ({enrolledCount}): <strong className="text-white font-semibold">{enrolledStudentNames || 'Nessuno'}</strong></span>
+                            </div>
                           </div>
                           <div className="w-2 h-2 bg-slate-950 border-r border-b border-slate-700 rotate-45 -mt-1" />
                         </div>
@@ -851,18 +830,14 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
                         {/* Badges container */}
                         <div className="flex flex-wrap items-center justify-center gap-1 mt-1 print:hidden">
-                          {/* Mister badge */}
-                          {cell.targetAudience === 'mister' && (
-                            <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-full flex items-center gap-0.5 shadow-sm uppercase tracking-wider">
-                              <span>🏆 MISTER</span>
-                            </span>
-                          )}
-
                           {/* Enrolled count pill badge */}
                           {enrolledCount > 0 && (
-                            <div className="bg-black/50 text-white rounded-full text-[9px] font-black px-1.5 py-0.2 backdrop-blur-xs flex items-center gap-0.5 shadow-sm">
+                            <div
+                              className="bg-black/60 hover:bg-black/80 text-white rounded-full text-[9px] font-black px-2 py-0.5 backdrop-blur-xs flex items-center gap-1 shadow-sm transition-transform hover:scale-105"
+                              title={`Presenti al corso di ${cell.name}: ${enrolledStudentNames || 'Nessuno'}`}
+                            >
                               <Users className="w-2.5 h-2.5 text-[#7cb342]" />
-                              <span>{enrolledCount} {enrolledCount === 1 ? 'iscritto' : 'iscritti'}</span>
+                              <span>{enrolledCount} {enrolledCount === 1 ? 'presente' : 'presenti'}</span>
                             </div>
                           )}
                         </div>
@@ -1070,20 +1045,6 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
                   >
                     {GYM_CATEGORIES[activeCourseDetail.cell.category]?.name || 'Corso'}
                   </span>
-                  {/* Target Audience Badge */}
-                  {activeCourseDetail.cell.targetAudience === 'mister' ? (
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 uppercase tracking-wider">
-                      🏆 Per Mister
-                    </span>
-                  ) : activeCourseDetail.cell.targetAudience === 'tutti' ? (
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider">
-                      👥 Allievi & Mister
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
-                      🎓 Corso Allievi
-                    </span>
-                  )}
                   <span className="text-xs text-slate-400 font-bold uppercase">
                     {activeCourseDetail.dayKey} • h {activeCourseDetail.time}
                   </span>
@@ -1138,18 +1099,37 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
             {/* Modal Body */}
             <div className="overflow-y-auto space-y-4 py-4 pr-1 scrollbar-none flex-1 text-sm text-slate-300">
-              {/* If targetAudience === 'mister' Banner */}
-              {activeCourseDetail.cell.targetAudience === 'mister' && (
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
-                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-bold text-amber-300">Corso Riservato a Mister / Staff Tecnico</div>
-                    <p className="text-[11px] text-amber-200/90 mt-0.5">
-                      Questo corso è consultabile da tutti nel calendario. {!isGestore && 'Le iscrizioni e modifiche per questa sessione sono gestite dal Gestore o dal Mister responsabile.'}
-                    </p>
+              {/* Box Presenti al corso di {cell.name} */}
+              {(() => {
+                const enrolledIds = activeCourseDetail.cell.enrolledMemberIds || [];
+                const enrolledNames = enrolledIds
+                  .map((id) => students.find((s) => s.id === id)?.name)
+                  .filter(Boolean);
+
+                return (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 text-xs space-y-2 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 text-xs">
+                        <Users className="w-4 h-4 text-emerald-400" />
+                        Presenti al corso di {activeCourseDetail.cell.name}:
+                      </span>
+                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {enrolledNames.length} {enrolledNames.length === 1 ? 'presente' : 'presenti'}
+                      </span>
+                    </div>
+
+                    {enrolledNames.length > 0 ? (
+                      <p className="text-white font-bold text-sm sm:text-base leading-relaxed tracking-wide pt-0.5">
+                        {enrolledNames.join(', ')}
+                      </p>
+                    ) : (
+                      <p className="text-slate-400 italic text-xs pt-0.5">
+                        Nessun allievo ancora registrato come presente a questo corso.
+                      </p>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Quick Info Grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1523,6 +1503,22 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Daily Attendance Modal (Riepilogo Presenze Giornaliere ai Corsi) */}
+      <DailyAttendanceModal
+        isOpen={isDailyAttendanceModalOpen}
+        onClose={() => setIsDailyAttendanceModalOpen(false)}
+        schedule={schedule}
+        students={students}
+        onOpenCourseDetail={(cell, dayKey, time, rowId) => {
+          setActiveCourseDetail({
+            cell,
+            dayKey,
+            time,
+            rowId,
+          });
+        }}
+      />
     </div>
   );
 };

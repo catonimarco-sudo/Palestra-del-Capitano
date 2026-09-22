@@ -173,57 +173,7 @@ export const GymScheduleModal: React.FC<GymScheduleModalProps> = ({
             </div>
           </div>
 
-          {/* Destinatari del Corso (Allievi vs Mister vs Tutti) */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Destinatari del Corso
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setTargetAudience('allievi')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  targetAudience === 'allievi'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-sm'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                }`}
-              >
-                <span>🎓</span>
-                <span>Per Allievi</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTargetAudience('mister')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  targetAudience === 'mister'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-sm'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                }`}
-              >
-                <span>🏆</span>
-                <span>Per Mister / Staff</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTargetAudience('tutti')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  targetAudience === 'tutti'
-                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/60 shadow-sm'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                }`}
-              >
-                <span>👥</span>
-                <span>Aperto a Tutti</span>
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              {targetAudience === 'mister'
-                ? '🏆 Questo corso verrà visualizzato con il contrassegno speciale "MISTER / STAFF". Gli allievi lo vedranno nel tabellone ma sarà indicato come corso riservato al Mister.'
-                : targetAudience === 'allievi'
-                ? '🎓 Corso standard per allievi con inserimento presenze.'
-                : '👥 Corso aperto a tutti (allievi e staff).'}
-            </p>
-          </div>
+
 
           {/* SCELTA COLORI */}
           <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
