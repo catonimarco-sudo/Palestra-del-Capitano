@@ -100,6 +100,26 @@
     padding-bottom: 0 !important;
     margin-bottom: 0 !important;
   }
+
+  /* Specific rules when printing the Attendance List / Sheet */
+  body.printing-attendance #gym-poster-container {
+    display: none !important;
+  }
+
+  body.printing-attendance #attendance-print-document {
+    display: block !important;
+  }
+
+  body:not(.printing-attendance) #attendance-print-document {
+    display: none !important;
+  }
+}
+
+/* Screen visibility for attendance print document */
+@media screen {
+  #attendance-print-document {
+    display: none;
+  }
 }
 
 

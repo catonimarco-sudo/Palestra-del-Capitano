@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   GYM_CATEGORIES,
   GymCourseCategory,
@@ -34,6 +34,9 @@ import {
   Palette,
   RotateCcw,
   ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -41,7 +44,16 @@ import {
   saveScheduleToCloud,
   subscribeToCategoryColors,
   saveCategoryColorsToCloud,
+  subscribeToWeekEnrollments,
+  saveWeekEnrollmentsToCloud,
 } from '../lib/firebase';
+import {
+  getMondayForOffset,
+  getWeekDatesInfo,
+  getWeekKey,
+  formatWeekLabel,
+  DayDateInfo,
+} from '../utils/dateUtils';
 
 export type DayKey = 'lunedi' | 'martedi' | 'mercoledi' | 'giovedi' | 'venerdi';
 
@@ -131,6 +143,141 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Week navigation state (0 = current week, 1 = next week, -1 = previous week)
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const mondayDate = useMemo(() => getMondayForOffset(weekOffset), [weekOffset]);
+  const weekDates = useMemo(() => getWeekDatesInfo(mondayDate), [mondayDate]);
+  const currentWeekKey = useMemo(() => getWeekKey(mondayDate), [mondayDate]);
+  const weekLabel = useMemo(() => formatWeekLabel(mondayDate), [mondayDate]);
+
+  // Multi-week enrollments: weekKey -> (cellId -> studentIds[])
+  const [weekEnrollments, setWeekEnrollments] = useState<Record<string, Record<string, string[]>>>(() => {
+    try {
+      const saved = localStorage.getItem('gym_week_enrollments');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  // Seed current week enrollments from initial schedule if not yet set
+  useEffect(() => {
+    const thisMondayKey = getWeekKey(getMondayForOffset(0));
+    setWeekEnrollments((prev) => {
+      if (prev[thisMondayKey] && Object.keys(prev[thisMondayKey]).length > 0) return prev;
+      const initialMap: Record<string, string[]> = {};
+      schedule.forEach((row) => {
+        Object.values(row.days).forEach((cell) => {
+          if (cell && cell.enrolledMemberIds && cell.enrolledMemberIds.length > 0) {
+            initialMap[cell.id] = cell.enrolledMemberIds;
+          }
+        });
+      });
+      const updated = { ...prev, [thisMondayKey]: initialMap };
+      try {
+        localStorage.setItem('gym_week_enrollments', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  }, [schedule]);
+
+  // Subscribe to real-time Firestore week enrollments
+  useEffect(() => {
+    const unsub = subscribeToWeekEnrollments((cloudEnrollments) => {
+      setWeekEnrollments(cloudEnrollments);
+    }, weekEnrollments);
+    return () => unsub();
+  }, []);
+
+  const saveWeekEnrollments = (updated: Record<string, Record<string, string[]>>) => {
+    setWeekEnrollments(updated);
+    try {
+      localStorage.setItem('gym_week_enrollments', JSON.stringify(updated));
+    } catch {}
+    saveWeekEnrollmentsToCloud(updated).catch(() => {});
+  };
+
+  // Compute displayed schedule for the chosen week:
+  // courses and instructors are identical; enrollments are week-specific.
+  const displayedSchedule = useMemo(() => {
+    const currentWeekMap = weekEnrollments[currentWeekKey] || {};
+    return schedule.map((row) => {
+      const updatedDays = { ...row.days };
+      (Object.keys(updatedDays) as DayKey[]).forEach((dayKey) => {
+        const cell = updatedDays[dayKey];
+        if (cell) {
+          const enrolled =
+            currentWeekMap[cell.id] !== undefined
+              ? currentWeekMap[cell.id]
+              : weekOffset === 0 && !weekEnrollments[currentWeekKey]
+                ? cell.enrolledMemberIds || []
+                : [];
+          updatedDays[dayKey] = {
+            ...cell,
+            enrolledMemberIds: enrolled,
+          };
+        }
+      });
+      return {
+        ...row,
+        days: updatedDays,
+      };
+    });
+  }, [schedule, weekEnrollments, currentWeekKey, weekOffset]);
+
+  // Week navigation controls
+  const handleNextWeek = () => {
+    setWeekOffset((prev) => {
+      const next = prev + 1;
+      const nextMonday = getMondayForOffset(next);
+      showToast(`🗓️ ${formatWeekLabel(nextMonday)}`);
+      return next;
+    });
+  };
+
+  const handlePrevWeek = () => {
+    setWeekOffset((prev) => {
+      const next = prev - 1;
+      const nextMonday = getMondayForOffset(next);
+      showToast(`🗓️ ${formatWeekLabel(nextMonday)}`);
+      return next;
+    });
+  };
+
+  const handleCurrentWeek = () => {
+    setWeekOffset(0);
+    showToast('🗓️ Tornato alla settimana corrente');
+  };
+
+  // Touch Swipe detection on schedule table
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartXRef.current;
+    const deltaY = touchEndY - touchStartYRef.current;
+
+    // Detect horizontal swipe (> 50px and horizontal movement dominant)
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      if (deltaX < 0) {
+        // Swiped left -> Next week
+        handleNextWeek();
+      } else {
+        // Swiped right -> Previous week
+        handlePrevWeek();
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
   };
 
   // Update a category's global color
@@ -278,7 +425,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     window.print();
   };
 
-  // Toggle/Enroll student into course
+  // Toggle/Enroll student into course for current week
   const handleToggleEnrollment = (
     rowId: string,
     dayKey: DayKey,
@@ -287,55 +434,51 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
     const student = students.find((s) => s.id === studentId);
     const studentName = student?.name || 'Allievo';
 
-    const updated = schedule.map((row) => {
-      if (row.rowId !== rowId) return row;
-
-      const cell = row.days[dayKey];
-      if (!cell) return row;
-
-      const currentEnrolled = cell.enrolledMemberIds || [];
-      const isEnrolled = currentEnrolled.includes(studentId);
-      const nextEnrolled = isEnrolled
-        ? currentEnrolled.filter((id) => id !== studentId)
-        : [...currentEnrolled, studentId];
-
-      if (!isEnrolled) {
-        try {
-          confetti({
-            particleCount: 40,
-            spread: 60,
-            origin: { y: 0.7 },
-            colors: ['#7cb342', '#0288d1', '#d81b60'],
-          });
-        } catch {}
-        showToast(`✓ ${studentName} iscritto al corso "${cell.name}"!`);
-      } else {
-        showToast(`${studentName} rimosso dal corso "${cell.name}".`);
+    let targetCell: GymScheduleCell | null = null;
+    for (const row of displayedSchedule) {
+      if (row.rowId === rowId && row.days[dayKey]) {
+        targetCell = row.days[dayKey];
+        break;
       }
+    }
 
-      const updatedCell: GymScheduleCell = {
-        ...cell,
-        enrolledMemberIds: nextEnrolled,
-      };
+    if (!targetCell) return;
 
-      // update activeCourseDetail if currently open
-      if (activeCourseDetail && activeCourseDetail.cell.id === cell.id) {
-        setActiveCourseDetail({
-          ...activeCourseDetail,
-          cell: updatedCell,
+    const currentEnrolled = targetCell.enrolledMemberIds || [];
+    const isEnrolled = currentEnrolled.includes(studentId);
+    const nextEnrolled = isEnrolled
+      ? currentEnrolled.filter((id) => id !== studentId)
+      : [...currentEnrolled, studentId];
+
+    if (!isEnrolled) {
+      try {
+        confetti({
+          particleCount: 40,
+          spread: 60,
+          origin: { y: 0.7 },
+          colors: ['#7cb342', '#0288d1', '#d81b60'],
         });
-      }
+      } catch {}
+      showToast(`✓ ${studentName} iscritto a "${targetCell.name}" (${weekDates[dayKey]?.dateStr || ''})!`);
+    } else {
+      showToast(`${studentName} rimosso da "${targetCell.name}".`);
+    }
 
-      return {
-        ...row,
-        days: {
-          ...row.days,
-          [dayKey]: updatedCell,
-        },
-      };
-    });
+    const updatedWeekMap = {
+      ...weekEnrollments,
+      [currentWeekKey]: {
+        ...(weekEnrollments[currentWeekKey] || {}),
+        [targetCell.id]: nextEnrolled,
+      },
+    };
+    saveWeekEnrollments(updatedWeekMap);
 
-    saveSchedule(updated);
+    if (activeCourseDetail && activeCourseDetail.cell.id === targetCell.id) {
+      setActiveCourseDetail({
+        ...activeCourseDetail,
+        cell: { ...activeCourseDetail.cell, enrolledMemberIds: nextEnrolled },
+      });
+    }
   };
 
   // Autonomous direct self-enrollment by student (Nome, Cognome, Telefono facoltativo)
@@ -361,7 +504,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
 
     const currentEnrolled = activeCourseDetail.cell.enrolledMemberIds || [];
     if (currentEnrolled.includes(student.id)) {
-      showToast('⚠️ Sei già iscritto/a a questa lezione!');
+      showToast('⚠️ Sei già iscritto/a a questa lezione per questa settimana!');
       return;
     }
 
@@ -371,18 +514,14 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       enrolledMemberIds: nextEnrolled,
     };
 
-    const updatedSchedule = schedule.map((row) => {
-      if (row.rowId !== activeCourseDetail.rowId) return row;
-      return {
-        ...row,
-        days: {
-          ...row.days,
-          [activeCourseDetail.dayKey]: updatedCell,
-        },
-      };
-    });
-
-    saveSchedule(updatedSchedule);
+    const updatedWeekMap = {
+      ...weekEnrollments,
+      [currentWeekKey]: {
+        ...(weekEnrollments[currentWeekKey] || {}),
+        [activeCourseDetail.cell.id]: nextEnrolled,
+      },
+    };
+    saveWeekEnrollments(updatedWeekMap);
 
     setActiveCourseDetail({
       ...activeCourseDetail,
@@ -402,7 +541,7 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       });
     } catch {}
 
-    showToast(`🎉 Iscrizione confermata per ${fullName}!`);
+    showToast(`🎉 Iscrizione confermata per ${fullName} (${weekDates[activeCourseDetail.dayKey]?.dateStr || ''})!`);
   };
 
   // Remove presence from course
@@ -416,18 +555,14 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       enrolledMemberIds: nextEnrolled,
     };
 
-    const updatedSchedule = schedule.map((row) => {
-      if (row.rowId !== activeCourseDetail.rowId) return row;
-      return {
-        ...row,
-        days: {
-          ...row.days,
-          [activeCourseDetail.dayKey]: updatedCell,
-        },
-      };
-    });
-
-    saveSchedule(updatedSchedule);
+    const updatedWeekMap = {
+      ...weekEnrollments,
+      [currentWeekKey]: {
+        ...(weekEnrollments[currentWeekKey] || {}),
+        [activeCourseDetail.cell.id]: nextEnrolled,
+      },
+    };
+    saveWeekEnrollments(updatedWeekMap);
 
     setActiveCourseDetail({
       ...activeCourseDetail,
@@ -663,10 +798,75 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
+      {/* SETTIMANA & SWIPE NAVIGATION BAR */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xl print:hidden">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevWeek}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-slate-700 shadow-sm"
+            title="Settimana precedente (puoi anche fare swipe a destra sulla tabella)"
+          >
+            <ChevronLeft className="w-4 h-4 text-[#7cb342]" />
+            <span>Settimana Prec.</span>
+          </button>
+          <button
+            onClick={handleNextWeek}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-slate-700 shadow-sm"
+            title="Settimana successiva (puoi anche fare swipe a sinistra sulla tabella)"
+          >
+            <span>Settimana Succ.</span>
+            <ChevronRight className="w-4 h-4 text-[#7cb342]" />
+          </button>
+        </div>
+
+        {/* Center Current Week Info */}
+        <div className="flex items-center gap-3 flex-wrap justify-center">
+          <div className="flex items-center gap-2 bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <Calendar className="w-4 h-4 text-[#7cb342]" />
+            <span className="font-black text-sm sm:text-base text-white tracking-tight">
+              {weekLabel}
+            </span>
+          </div>
+
+          {weekOffset !== 0 ? (
+            <button
+              onClick={handleCurrentWeek}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Oggi / Settimana Corrente</span>
+            </button>
+          ) : (
+            <span className="px-2.5 py-1 rounded-xl bg-[#7cb342]/20 text-[#7cb342] text-xs font-black border border-[#7cb342]/30">
+              Settimana Corrente
+            </span>
+          )}
+        </div>
+
+        {/* Swipe hint and quick attendance button */}
+        <div className="text-xs text-slate-400 flex items-center gap-2">
+          <span className="hidden lg:inline">
+            💡 Sfoglia con i pulsanti o <strong>fai swipe ↔</strong> sulla tabella per cambiare settimana
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsDailyAttendanceModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/40"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Elenco & Stampa Presenze</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* TIMETABLE POSTER CONTAINER (MATCHING THE ORIGINAL CENTRO SPORTIVO HOF SCHEDULE) */}
       {/* ========================================================================= */}
       <div
         id="print-gym-schedule"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         className={`rounded-3xl p-4 sm:p-7 shadow-2xl transition-colors duration-200 ${
           themeMode === 'poster'
             ? 'bg-white text-slate-900 border border-slate-200'
@@ -693,26 +893,45 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
         {/* TIMETABLE GRID TABLE */}
         <div className="overflow-x-auto print:overflow-visible scrollbar-none">
           <div className="min-w-[760px] select-none">
-            {/* Header Row: Time + 5 Days */}
+            {/* Header Row: Time + 5 Days with Dates */}
             <div className="grid grid-cols-11 gap-1.5 sm:gap-2 mb-2">
               <div className="col-span-1" />
-              {DAY_COLUMNS.map((day) => (
-                <div
-                  key={day.key}
-                  className={`col-span-2 text-center py-2 px-1 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase border ${
-                    themeMode === 'poster'
-                      ? 'bg-slate-50 text-slate-800 border-slate-300 shadow-sm'
-                      : 'bg-slate-950 text-slate-200 border-slate-800'
-                  } print:bg-gray-100 print:text-black print:border-gray-400`}
-                >
-                  {day.label}
-                </div>
-              ))}
+              {DAY_COLUMNS.map((day) => {
+                const dateInfo = weekDates?.[day.key];
+                const isToday = dateInfo?.isToday;
+                return (
+                  <div
+                    key={day.key}
+                    className={`col-span-2 text-center py-2 px-1.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase border transition-all ${
+                      isToday
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/50 ring-2 ring-emerald-500/30'
+                        : themeMode === 'poster'
+                          ? 'bg-slate-50 text-slate-800 border-slate-300 shadow-sm'
+                          : 'bg-slate-950 text-slate-200 border-slate-800'
+                    } print:bg-gray-100 print:text-black print:border-gray-400`}
+                  >
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      <span>{day.label}</span>
+                      {dateInfo && (
+                        <span
+                          className={`text-[10px] sm:text-xs font-black px-1.5 py-0.2 rounded-md ${
+                            isToday
+                              ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                              : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 print:bg-transparent print:border print:border-gray-300'
+                          }`}
+                        >
+                          {dateInfo.dateStr}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Timetable Rows */}
             <div className="space-y-1.5 sm:space-y-2">
-              {schedule.map((row) => (
+              {displayedSchedule.map((row) => (
                 <div
                   key={row.rowId}
                   className="grid grid-cols-11 gap-1.5 sm:gap-2 items-stretch"
@@ -1511,8 +1730,15 @@ export const GymScheduleView: React.FC<GymScheduleViewProps> = ({
       <DailyAttendanceModal
         isOpen={isDailyAttendanceModalOpen}
         onClose={() => setIsDailyAttendanceModalOpen(false)}
-        schedule={schedule}
+        schedule={displayedSchedule}
         students={students}
+        gymInfo={gymInfo}
+        weekLabel={weekLabel}
+        weekDates={weekDates}
+        onPrevWeek={handlePrevWeek}
+        onNextWeek={handleNextWeek}
+        onCurrentWeek={handleCurrentWeek}
+        isCurrentWeek={weekOffset === 0}
         onOpenCourseDetail={(cell, dayKey, time, rowId) => {
           setActiveCourseDetail({
             cell,

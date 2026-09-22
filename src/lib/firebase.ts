@@ -151,6 +151,55 @@ export async function saveScheduleToCloud(schedule: GymScheduleRow[]) {
   setCloudConnected(true);
 }
 
+// 1b. Weekly Enrollments (Presenze per settimana)
+export function subscribeToWeekEnrollments(
+  onData: (enrollments: Record<string, Record<string, string[]>>) => void,
+  initialFallback: Record<string, Record<string, string[]>>
+) {
+  const docRef = doc(db, 'gym_schedule', 'week_enrollments');
+
+  return onSnapshot(
+    docRef,
+    async (snap) => {
+      setCloudConnected(true);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data?.weeks && typeof data.weeks === 'object') {
+          onData(data.weeks);
+          try {
+            localStorage.setItem('gym_week_enrollments', JSON.stringify(data.weeks));
+          } catch {}
+          return;
+        }
+      }
+      onData(initialFallback);
+    },
+    (err) => {
+      console.warn('Week enrollments cloud sync error:', err);
+      onData(initialFallback);
+    }
+  );
+}
+
+export async function saveWeekEnrollmentsToCloud(
+  weekEnrollments: Record<string, Record<string, string[]>>
+) {
+  try {
+    localStorage.setItem('gym_week_enrollments', JSON.stringify(weekEnrollments));
+  } catch {}
+
+  const docRef = doc(db, 'gym_schedule', 'week_enrollments');
+  await setDoc(
+    docRef,
+    {
+      weeks: sanitizeForFirestore(weekEnrollments),
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  setCloudConnected(true);
+}
+
 // 2. Students / Allievi List
 export function subscribeToStudents(
   onData: (students: Allievo[]) => void,
